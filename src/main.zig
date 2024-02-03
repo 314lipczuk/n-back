@@ -5,17 +5,22 @@ const Position = enum { left_up, up, right_up, left, middle, right, left_down, d
 const Frame = struct { char: u8, position: Position };
 const GameState = struct {
     var Self = @This();
-    previous_timestep: i64,
     step: u32,
+    game_states: [game_steps]?Frame,
+    player_choices: [game_steps]?PlayerChoice,
+    start_timestep: f64,
+    is_running: bool,
     is_finished: bool,
-    start_timestep: i64,
-    pub fn init() Self {}
 };
 const RandGen = std.rand.DefaultPrng;
+const PlayerChoice = struct { position: bool, symbol: bool };
 
+// game config
 const legal_chars = [_]u8{ 'a', 'g', 't', 'e', 'f', 'n', 'r', 'p', 'l', 'c', 'g' };
 const time_per_step = 3;
+const game_steps = 30;
 
+// graphical config
 const padding = 50;
 const start_pos = rl.Vector2.init(0, 50);
 const square_size = 100;
@@ -28,11 +33,14 @@ pub fn main() anyerror!void {
     const screenWidth = 450;
     const screenHeight = 450;
 
+    var gs = GameState{ .is_running = false, .is_finished = false, .step = 0, .game_states = [1]?Frame{null} ** game_steps, .player_choices = [1]?PlayerChoice{null} ** game_steps, .start_timestep = 0 };
+
     rl.initWindow(screenWidth, screenHeight, "n-back zig");
     defer rl.closeWindow(); // Close window and OpenGL context
 
     var cursorPosition = rl.Vector2.init(-100, -100);
     var frame = Frame{ .char = 'c', .position = Position.left_down };
+    var current_choice = PlayerChoice{ .position = false, .symbol = false };
 
     rl.setTargetFPS(30); // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
@@ -42,12 +50,16 @@ pub fn main() anyerror!void {
         // Handle keys
         cursorPosition = rl.getMousePosition();
         if (rl.isKeyDown(rl.KeyboardKey.key_backspace)) {
-            // frame = generate_frame(rand);
-            frame = Frame{ .position = std.rand.Random.enumValue(rand.random(), Position), .char = std.rand.Random.uintAtMost(rand.random(), u8, legal_chars.len) };
+            current_choice.position = true;
         }
         if (rl.isKeyDown(rl.KeyboardKey.key_enter)) {
-            //frame = generate_frame(rand);
+            current_choice.symbol = true;
         }
+        if (rl.isKeyDown(rl.KeyboardKey.key_s)) {
+            gs.is_running = true;
+            gs.start_timestep = rl.getTime();
+        }
+        handleGameState(&rand, &gs, &frame, &current_choice);
 
         // Draw //----------------------------------------------------------------------------------
         rl.beginDrawing();
@@ -74,11 +86,6 @@ fn draw_grid() void {
     }
 }
 
-//fn generate_frame(r: std.rand.Xoshiro256) Frame {
-//    var f: Frame = Frame{ .position = std.rand.Random.enumValue(r.random(), Position), .char = std.rand.Random.uintAtMost(r.random(), usize, legal_chars.len) };
-//    return f;
-//}
-
 fn render_frame(f: *Frame) void {
     const position = switch (f.position) {
         .left_up => .{ start_pos.x + 2 * padding, start_pos.y + 2 * padding },
@@ -100,5 +107,23 @@ fn render_frame(f: *Frame) void {
     );
 }
 
-// 450 -> full width of window
-//
+fn handleGameState(rand: *RandGen, game_state: *GameState, frame: *Frame, control: *PlayerChoice) void {
+    if (!game_state.is_running or game_state.is_finished) return;
+
+    const t = rl.getTime();
+    const current: f64 = t - game_state.start_timestep;
+
+    const step: u32 = @intFromFloat(@divFloor(current, time_per_step));
+
+    if (game_state.step == @as(u32, @intFromFloat(game_steps))) {
+        game_state.is_finished = true;
+        game_state.is_running = false;
+    }
+    if (step > game_state.step) {
+        game_state.game_states[step] = frame.*;
+        game_state.player_choices[step] = control.*;
+        frame.position = std.rand.Random.enumValue(rand.random(), Position);
+        frame.char = legal_chars[std.rand.Random.uintLessThan(rand.random(), u8, legal_chars.len)];
+        game_state.step = step;
+    }
+}
