@@ -24,6 +24,7 @@ const legal_chars = [_]u8{
 };
 const seconds_per_step = 1;
 const game_steps = 30;
+const X_back = 2;
 
 // graphical config
 const screenWidth = 450;
@@ -58,11 +59,11 @@ pub fn main() anyerror!void {
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
         // Handle keys
         cursorPosition = rl.getMousePosition();
-        if (rl.isKeyDown(rl.KeyboardKey.key_backspace)) {
+        if (rl.isKeyDown(rl.KeyboardKey.key_left)) {
             current_choice.position = true;
             rl.drawCircle((screenWidth / 2) - padding, screenHeight - 15, 5, rl.Color.red);
         }
-        if (rl.isKeyDown(rl.KeyboardKey.key_enter)) {
+        if (rl.isKeyDown(rl.KeyboardKey.key_right)) {
             current_choice.symbol = true;
             rl.drawCircle((screenWidth / 2) + padding, screenHeight - 15, 5, rl.Color.blue);
         }
@@ -76,13 +77,13 @@ pub fn main() anyerror!void {
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(rl.Color.white);
-        //rl.drawText(
-        //    rl.textFormat("Mouse position X: %03i, Y: %03i", .{ @as(i32, @intFromFloat(cursorPosition.x)), @as(i32, @intFromFloat(cursorPosition.y)) }),
-        //    10,
-        //    40,
-        //    20,
-        //    rl.Color.light_gray,
-        //);
+        rl.drawText(
+            rl.textFormat("N = %01d\t Left - position\t Right - symbol", .{@as(u32, X_back)}),
+            10,
+            10,
+            20,
+            rl.Color.light_gray,
+        );
         if (gs.is_finished) {
             display_score(&score);
         }
@@ -151,7 +152,7 @@ fn handleGameState(rand: *RandGen, game_state: *GameState, frame: *Frame, contro
 fn calculate_score(state: *GameState, score: *rl.Vector2) void {
     std.debug.print("\nstate:{}", .{state});
     for (2..game_steps) |i| {
-        const true_state = state.game_states[i - 2].?;
+        const true_state = state.game_states[i - X_back].?;
         const second_true_state = state.game_states[i].?;
         const player_choice = state.player_choices[i];
         if (player_choice != null) {
