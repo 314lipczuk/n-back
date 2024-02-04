@@ -26,16 +26,19 @@ const seconds_per_step = 1;
 const game_steps = 30;
 
 // graphical config
+const screenWidth = 450;
+const screenHeight = 450;
+
 const padding = 50;
-const start_pos = rl.Vector2.init(0, 50);
+const start_pos = rl.Vector2.init(10, 50);
 const square_size = 100;
 const offset = 110;
+
+const grid_size = 2 * padding + 2 * offset + 3 * square_size;
 
 pub fn main() anyerror!void {
     // Initialization // --------------------------------------------------------------------------------------
     var rand = RandGen.init(0);
-    const screenWidth = 450;
-    const screenHeight = 450;
 
     var gs = GameState{ .is_running = false, .is_finished = false, .step = 0, .game_states = [1]?Frame{null} ** game_steps, .player_choices = [1]?PlayerChoice{null} ** game_steps, .start_timestep = 0 };
 
@@ -57,9 +60,11 @@ pub fn main() anyerror!void {
         cursorPosition = rl.getMousePosition();
         if (rl.isKeyDown(rl.KeyboardKey.key_backspace)) {
             current_choice.position = true;
+            rl.drawCircle((screenWidth / 2) - padding, screenHeight - 15, 5, rl.Color.red);
         }
         if (rl.isKeyDown(rl.KeyboardKey.key_enter)) {
             current_choice.symbol = true;
+            rl.drawCircle((screenWidth / 2) + padding, screenHeight - 15, 5, rl.Color.blue);
         }
         if (rl.isKeyDown(rl.KeyboardKey.key_s)) {
             gs.is_running = true;
@@ -138,7 +143,6 @@ fn handleGameState(rand: *RandGen, game_state: *GameState, frame: *Frame, contro
         game_state.player_choices[step] = control.*;
         frame.position = std.rand.Random.enumValue(rand.random(), Position);
         frame.char = legal_chars[std.rand.Random.uintLessThan(rand.random(), u8, legal_chars.len)];
-        //game_state.step = step;
     }
 
     game_state.step = step;
