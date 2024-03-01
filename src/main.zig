@@ -3,14 +3,6 @@ const rl = @import("raylib");
 
 const Position = enum { left_up, up, right_up, left, middle, right, left_down, down, right_down };
 const Frame = struct { char: u8, position: Position };
-const GameState = struct {
-    step: u32,
-    game_states: [game_steps]?Frame,
-    player_choices: [game_steps]?PlayerChoice,
-    start_timestep: f64,
-    is_running: bool,
-    is_finished: bool,
-};
 const RandGen = std.rand.DefaultPrng;
 const PlayerChoice = struct { position: bool, symbol: bool };
 
@@ -37,11 +29,15 @@ const offset = 110;
 
 const grid_size = 2 * padding + 2 * offset + 3 * square_size;
 
+var is_running = false;
+var step: u32 = 0;
+var game_states = [1]?Frame{null} ** game_steps;
+var player_choices = [1]?PlayerChoice{null} ** game_steps;
+var start_timestep: f64 = 0;
+
 pub fn main() anyerror!void {
     // Initialization // --------------------------------------------------------------------------------------
     var rand = RandGen.init(0);
-
-    var gs = GameState{ .is_running = false, .is_finished = false, .step = 0, .game_states = [1]?Frame{null} ** game_steps, .player_choices = [1]?PlayerChoice{null} ** game_steps, .start_timestep = 0 };
 
     rl.initWindow(screenWidth, screenHeight, "n-back zig");
     defer rl.closeWindow(); // Close window and OpenGL context
@@ -68,27 +64,37 @@ pub fn main() anyerror!void {
             rl.drawCircle((screenWidth / 2) + padding, screenHeight - 15, 5, rl.Color.blue);
         }
         if (rl.isKeyDown(rl.KeyboardKey.key_s)) {
-            gs.is_running = true;
-            gs.start_timestep = rl.getTime();
+            if (!is_running) {
+                for (0..game_steps) |i| {
+                    player_choices[i] = null;
+                    game_states[i] = null;
+                }
+                is_running = true;
+                start_timestep = rl.getTime();
+            }
         }
-        handleGameState(&rand, &gs, &frame, &current_choice, &score);
+        if (!is_running) {}
+
+        handleGameState(&rand, &frame, &current_choice, &score);
 
         // Draw //----------------------------------------------------------------------------------
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(rl.Color.white);
-        rl.drawText(
-            rl.textFormat("N = %01d\t Left - position\t Right - symbol", .{@as(u32, X_back)}),
-            10,
-            10,
-            20,
-            rl.Color.light_gray,
-        );
-        if (gs.is_finished) {
-            display_score(&score);
+
+        if (is_running) {
+            rl.drawText(
+                rl.textFormat("N = %01d\t Left - position\t Right - symbol", .{@as(u32, X_back)}),
+                10,
+                10,
+                20,
+                rl.Color.light_gray,
+            );
+            draw_grid();
+            render_frame(&frame);
+        } else {
+            draw_stop_screen(&score);
         }
-        draw_grid();
-        render_frame(&frame);
     }
 }
 
@@ -117,44 +123,43 @@ fn render_frame(f: *Frame) void {
         rl.textFormat("%c", .{f.char}),
         @intFromFloat(position[0]),
         @intFromFloat(position[1]),
-        20,
+        25,
         rl.Color.light_gray,
     );
 }
 
-fn handleGameState(rand: *RandGen, game_state: *GameState, frame: *Frame, control: *PlayerChoice, score: *rl.Vector2) void {
-    if (!game_state.is_running or game_state.is_finished) return;
+fn handleGameState(rand: *RandGen, frame: *Frame, control: *PlayerChoice, score: *rl.Vector2) void {
+    if (!is_running) return;
 
     const t = rl.getTime();
-    const current: f64 = t - game_state.start_timestep;
-    const step: u32 = @intFromFloat(@divFloor(current, seconds_per_step));
+    const current: f64 = t - start_timestep;
+    const c_step: u32 = @intFromFloat(@divFloor(current, seconds_per_step));
 
-    if (step == game_steps) {
-        game_state.is_finished = true;
-        game_state.is_running = false;
-        calculate_score(game_state, score);
+    if (c_step == game_steps) {
+        is_running = false;
+        calculate_score(score);
+        return;
     }
 
     if (step >= game_steps) {
         return;
     }
 
-    if (game_state.game_states[step] == null) {
-        game_state.game_states[step] = frame.*;
-        game_state.player_choices[step] = control.*;
+    if (game_states[c_step] == null) {
+        game_states[c_step] = frame.*;
+        player_choices[c_step] = control.*;
         frame.position = std.rand.Random.enumValue(rand.random(), Position);
         frame.char = legal_chars[std.rand.Random.uintLessThan(rand.random(), u8, legal_chars.len)];
     }
 
-    game_state.step = step;
+    step = c_step;
 }
 
-fn calculate_score(state: *GameState, score: *rl.Vector2) void {
-    std.debug.print("\nstate:{}", .{state});
+fn calculate_score(score: *rl.Vector2) void {
     for (2..game_steps) |i| {
-        const true_state = state.game_states[i - X_back].?;
-        const second_true_state = state.game_states[i].?;
-        const player_choice = state.player_choices[i];
+        const true_state = game_states[i - X_back].?;
+        const second_true_state = game_states[i].?;
+        const player_choice = player_choices[i];
         if (player_choice != null) {
             score.x += if (player_choice.?.position and second_true_state.position == true_state.position) 1 else 0;
             score.y += if (player_choice.?.symbol and second_true_state.char == true_state.char) 1 else 0;
@@ -162,6 +167,8 @@ fn calculate_score(state: *GameState, score: *rl.Vector2) void {
     }
 }
 
-fn display_score(score: *rl.Vector2) void {
+fn draw_stop_screen(score: *rl.Vector2) void {
+    rl.drawText(rl.textFormat("Press s to start", .{}), @intFromFloat(100), @intFromFloat(10), 20, rl.Color.dark_gray);
     rl.drawText(rl.textFormat("Score position:\t%03d / %03d\nScore symbol:\t%03d / %03d", .{ score.x, @as(u32, game_steps), score.y, @as(u32, game_steps) }), @intFromFloat(30), @intFromFloat(40), 20, rl.Color.dark_gray);
+    rl.drawText(rl.textFormat("Config:\n\nMaxIter:\t\t\t%02d\n\nN count:\t\t\t%02d\n\nTicks/s:\t\t\t%02d", .{ @as(u32, game_steps), @as(u32, X_back), @as(u32, seconds_per_step) }), @intFromFloat(10), @intFromFloat(80), 35, rl.Color.dark_gray);
 }
